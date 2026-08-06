@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 
 from ...bot import Bot, Telemetry
 from ...callbacks import EngineCallbacks, log_buffer_len
@@ -21,7 +21,6 @@ from .judge import Judge
 logger = logging.getLogger("humanbound.engine.orchestrator")
 
 # Constants
-EXPERIMENT_THREAD_TIMEOUT = 10800  # 3 hours
 INIT_LOGS_BUFFER_LENGTH = 5
 
 LOGS_BUFFER_LENGTH = 20  # number of logs to buffer before sending them in a single request
@@ -398,15 +397,40 @@ def orchestrator_run(
             )
             futures[future] = test_sub_category
 
-        for future in futures:
-            try:
-                if callbacks.is_terminated():
+        pending = set(futures)
+        while pending:
+            _done, pending = wait(pending, timeout=1.0)
+            if callbacks.is_terminated():
+                for future in pending:
                     future.cancel()
-                    continue
-                future.result(timeout=EXPERIMENT_THREAD_TIMEOUT)
-            except Exception:
+                break
+
+    # Pool has joined — every started worker finished; judge failures now.
+    category_failures = []
+    if not callbacks.is_terminated():
+        for future, test_sub_category in futures.items():
+            if future.cancelled():
                 continue
+            e = future.exception()
+            if e is None:
+                continue
+            category_failures.append((test_sub_category, e))
+            logger.debug(
+                "OWASP Agentic category worker failed: %s",
+                test_sub_category,
+                exc_info=e,
+            )
+            callbacks.on_error(
+                e.__class__.__name__,
+                {
+                    "where": "OWASP Agentic :: Category worker",
+                    "category": test_sub_category,
+                    "e": str(e),
+                    "trace": "".join(traceback.format_exception(e)),
+                },
+            )
 
     # Signal completion via callback
     if not callbacks.is_terminated():
-        callbacks.on_complete(Status.Finished.value)
+        status = Status.Failed.value if category_failures else Status.Finished.value
+        callbacks.on_complete(status)
