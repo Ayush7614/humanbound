@@ -7,7 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`hb guardrails` now exports rules from local test results.** Local runs
+  store insights beneath `results.insights`, but the exporter only read the
+  legacy top-level key and consequently emitted an empty ruleset. The exporter
+  now reads the current schema while retaining the legacy fallback (#102).
+- **Network failures now surface as a clean `APIError` everywhere** (#68,
+  thanks @JChario for the report and the original fix). The client called
+  `requests` without wrapping transport errors, so a dropped connection or
+  timeout escaped as a raw requests exception — MCP tools returned FastMCP's
+  raw "Error executing tool …" text instead of their structured
+  `{"error": …}` envelope, and the message carried urllib3 internals. The
+  client now converts transport failures to `APIError` at the source (CLI
+  commands and all MCP tools handle it uniformly), and every MCP tool
+  additionally falls back to the structured envelope for any unexpected
+  exception.
+- **`pip install humanbound[mcp]` works again.** mcp 2.0.0 (2026-07-28)
+  removed `mcp.server.fastmcp`, so a fresh install broke `hb mcp` at import;
+  the extra now pins `mcp>=1.2.0,<2`.
+- **Agentic category-worker failures no longer report a completed scan.**
+  (#107, thanks @Ayush7614). Exceptions raised by an OWASP Agentic category
+  worker are now surfaced through the engine error callback and mark the run
+  `Failed`; local runs preserve that failure status while saving completed
+  partial results. Note for CI users: runs that previously (and wrongly)
+  exited `0` on a worker crash now exit `2`, per the documented exit-code
+  contract.
+- **`hb test` no longer claims "no results produced" when a failed run saved
+  partial results** — the exit message now points to `hb logs` instead.
+- **A crash in any local orchestrator keeps completed conversations.** The
+  local runner's generic failure path now saves partial results the same way
+  an orchestrator-reported failure does, so `owasp_single_turn` and
+  `behavioral_qa` crashes no longer discard finished work.
+- **Agentic category failures are judged after the worker pool joins, not on
+  a per-future timeout.** The pool shutdown always waited for every started
+  worker, so the old 3-hour `future.result` timeout could only misreport a
+  slow-but-successful category as failed — never actually bound the run. A
+  worker crash also no longer prints its traceback twice on stderr; the full
+  trace still reaches the error callback and DEBUG logging.
+
 ### Security
+- **OAuth callback listeners are loopback-only and path-validated.** Login and
+  browser-session logout now bind only to `127.0.0.1`; login accepts an
+  authorization response only at its registered `/callback` path. Remaining
+  auth-bearing client calls that bypassed the shared wrappers also refuse
+  redirects (`persist_discovery`, token exchange, refresh, logout, and API
+  session exchange), closing the gap left after #97 — including API-key mode
+  where `x-api-key` would otherwise be forwarded across a hostname change.
+- **Local test result artifacts are written atomically at `0600`** under
+  `.humanbound/results/` directories hardened to `0700`. `logs.jsonl` retains
+  every attack prompt and the agent's raw replies (including disclosures the
+  agent wasn't supposed to make); they previously inherited the process umask
+  (commonly world-readable on first write). They now use the same secure writer
+  as `credentials.json`.
 - **Local secret files are written atomically at `0600`** (#67, thanks
   @JChario). `credentials.json`, the provider `config.yaml`, and the telemetry
   state file could briefly exist world-readable on first write (created at the
@@ -15,6 +66,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `os.replace` helper and are never world-readable. The OAuth login callback
   error page also escapes the reflected `error_description` to prevent a
   reflected-XSS in that page.
+
+### Fixed
+- **Local experiment starts no longer collide within the same second.** Each
+  local run ID now includes a short UUID suffix (`exp-{timestamp}-{uuid8}`), so
+  concurrent `hb test` processes no longer overwrite each other's `_runs` slot
+  or result directory.
+- **OpenAPI extraction now resolves `$ref` parameters and request body
+  schemas.** The parser previously skipped every `$ref` parameter and only read
+  inline `properties`, so component-based specs produced incomplete parameter
+  lists on the extractor. Local JSON Pointer resolution (with cycle-safe
+  `allOf` walking and depth guards) now follows `#/components/...` and Swagger 2
+  `#/parameters/...` refs. This is groundwork for consumers of `parameters` /
+  `responses`; `hb connect` today still reads only description/method/path/
+  summary from the parse result.
 
 ## [2.8.0] — 2026-07-30
 
@@ -539,9 +604,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same wheel as `humanbound_cli/`:
   ```python
   from humanbound import (
-      Bot, LocalRunner, Insight, TestingLevel,
-      EngineCallbacks, OrchestratorModule,
-      OwaspAgentic, OwaspSingleTurn, BehavioralQA,
+      Bot,
+      LocalRunner,
+      Insight,
+      TestingLevel,
+      EngineCallbacks,
+      OrchestratorModule,
+      OwaspAgentic,
+      OwaspSingleTurn,
+      BehavioralQA,
   )
   ```
   This is the stable, semver-protected contract. `humanbound_cli.*` stays as

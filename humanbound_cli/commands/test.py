@@ -482,8 +482,14 @@ def test_command(
             try:
                 client = runner.client
                 project = client.get(f"projects/{client.project_id}", include_project=True)
-                default_integ = project.get("default_integration") or {}
-                has_telemetry = bool(default_integ.get("telemetry"))
+                default_integ = (
+                    project.get("default_integration") if isinstance(project, dict) else {}
+                )
+                has_telemetry = (
+                    bool(default_integ.get("telemetry"))
+                    if isinstance(default_integ, dict)
+                    else False
+                )
             except Exception:
                 has_telemetry = False
         else:
@@ -871,6 +877,8 @@ def _resolve_exit(result: TestResult, final_status: str, fail_on: str) -> tuple[
     severity and sees nothing in either case.
     """
     if final_status == "Failed":
+        if (result.stats or {}).get("total", 0):
+            return EXIT_RUN_FAILED, "Run failed — partial results saved. See `hb logs`."
         return EXIT_RUN_FAILED, "Run failed — no results produced."
     if _all_errored(result.stats):
         return EXIT_RUN_FAILED, "No conversations completed — treating this run as a failure."
