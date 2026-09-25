@@ -26,6 +26,17 @@ hb test --endpoint ./config.json --scope ./scope.json --wait
   ✓ Results saved to .humanbound/results/
 ```
 
+## Architecture
+
+![Humanbound CLI engine architecture](../images/architecture.png)
+
+Every entry point — `hb` commands and the MCP server — goes through a single
+`TestRunner` abstraction. The `PlatformTestRunner` forwards to the Humanbound
+backend; the `LocalTestRunner` drives the in-process engine — scope discovery,
+orchestrators (OWASP agentic / single-turn / behavioral QA), bot, LLM
+provider, judge, and presenter — against your own LLM provider, writing
+results under `.humanbound/results/`.
+
 ## What You Get Locally
 
 | Feature | Local | Platform |
@@ -64,7 +75,7 @@ hb test --endpoint ./bot-config.json --scope ./scope.json --wait
 hb posture
 hb logs
 hb report -o report.html
-hb guardrails -o rules.yaml
+hb guardrails -o rules.json
 ```
 
 ## When to Use Local vs Platform

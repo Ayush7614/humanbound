@@ -27,7 +27,7 @@
   <a href="https://pypi.org/project/humanbound/"><img src="https://img.shields.io/pypi/dm/humanbound?style=flat-square&color=FD9506" alt="Downloads"/></a>
   <a href="https://github.com/humanbound/humanbound/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/humanbound/humanbound/ci.yml?style=flat-square&color=FD9506" alt="CI"/></a>
   <a href="https://github.com/humanbound/humanbound/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-FD9506?style=flat-square" alt="License"/></a>
-  <a href="https://discord.gg/WgTMpmSFtN"><img src="https://img.shields.io/badge/discord-community-FD9506?style=flat-square" alt="Discord"/></a>
+  <a href="https://discord.gg/QFTD6tr9zu"><img src="https://img.shields.io/badge/discord-community-FD9506?style=flat-square" alt="Discord"/></a>
   <a href="https://docs.humanbound.ai/"><img src="https://img.shields.io/badge/docs-humanbound.ai-FD9506?style=flat-square" alt="Docs"/></a>
 </p>
 
@@ -151,8 +151,9 @@ defenses:
 
 ```bash
 hb test --endpoint ./bot-config.json --wait   # find the failures
-hb guardrails -o rules.yaml                   # convert findings into firewall rules
-hb firewall train                             # train a Tier 2 classifier from test logs
+hb guardrails -o rules.json                   # convert findings into guardrail rules
+hb guardrails -f yaml -o agent.yaml           # the firewall's policy file
+hb firewall train --model detectors/setfit_classifier.py   # train a Tier 2 classifier
 ```
 
 Deploy the output with
@@ -190,6 +191,18 @@ The CLI and SDK share the same implementation, so they cannot drift. Authoring
 custom orchestrators and wiring `EngineCallbacks` is covered in the
 [docs](https://docs.humanbound.ai/).
 
+## Architecture
+
+<p align="center">
+  <img src="assets/architecture.png" alt="Humanbound CLI engine architecture" width="100%"/>
+</p>
+
+The CLI funnels every entry point — `hb` commands and the MCP server — through a
+single `TestRunner` abstraction. A `PlatformTestRunner` forwards to the
+Humanbound backend; a `LocalTestRunner` drives the in-process engine
+(scope discovery, orchestrators, bot, judge, presenter) against your own LLM
+provider, with results written under `.humanbound/results/`.
+
 ## Stability contract
 
 | Import path | Stability |
@@ -222,7 +235,7 @@ loop, release process, and DCO sign-off requirement (see [DCO.md](https://github
 - 🐛 [Report a bug](https://github.com/humanbound/humanbound/issues/new/choose)
 - 💡 [Request a feature](https://github.com/humanbound/humanbound/issues/new/choose)
 - 🔒 [Report a security issue](https://github.com/humanbound/humanbound/blob/main/SECURITY.md) — **not via public Issues**
-- 💬 [Join Discord](https://discord.gg/WgTMpmSFtN)
+- 💬 [Join Discord](https://discord.gg/QFTD6tr9zu)
 
 ## Telemetry
 

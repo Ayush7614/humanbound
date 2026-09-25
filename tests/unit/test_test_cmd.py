@@ -176,6 +176,23 @@ class TestFlags:
         assert _started_config(r).test_category == "humanbound/behavioral/qa"
 
     @patch(RUNNER_PATCH)
+    def test_omitted_flags_are_none_so_backend_default_applies(self, mock_get_runner):
+        """`hb test` with no category/level/lang flags must hand the runner a
+        TestConfig with those fields as None, so the request body omits them
+        and the platform-side default is used."""
+        client = _make_client()
+        r = platform_runner(client)
+        mock_get_runner.return_value = r
+
+        result = runner.invoke(cli, ["test"])
+
+        assert_exit_ok(result)
+        cfg = _started_config(r)
+        assert cfg.test_category is None
+        assert cfg.testing_level is None
+        assert cfg.lang is None
+
+    @patch(RUNNER_PATCH)
     def test_testing_level_flag(self, mock_get_runner):
         client = _make_client()
         r = platform_runner(client)
@@ -270,6 +287,23 @@ class TestFlags:
 
         assert_exit_ok(result)
         assert _started_config(r).context == long_context
+
+
+class TestExitCodeContract:
+    @patch(RUNNER_PATCH)
+    def test_exit_code_contract_unchanged_without_flag(self, mock_get_runner):
+        """No-op proof: identical to test_basic_invocation — plain `hb test`
+        must still run immediate mode and hit the normal exit-code contract."""
+        client = _make_client()
+        r = platform_runner(client, experiment_id="exp-new")
+        mock_get_runner.return_value = r
+
+        result = runner.invoke(cli, ["test"])
+
+        assert_exit_ok(result)
+        r.start.assert_called_once()
+        assert "exp-new" in result.output
+        assert "staged" not in result.output.lower()
 
 
 # ─────────────────────────────────────────────────────────────────────────
