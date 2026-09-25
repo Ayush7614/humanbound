@@ -38,9 +38,10 @@ The complete `hb` CLI reference, organised into eight categories: global flags, 
 |---|---|
 | `hb connect` | Connect your agent or scan a cloud platform |
 | `hb connect -l system` | Connect with deeper testing level (unit/system/acceptance) |
+| `hb connect --repo <path>` `[PREVIEW]` | Also infers the capability surface from source patterns |
 | `hb connect --no-test` | Connect and create project but skip the auto-test step |
 | `hb connect --test-category <path>` | Choose which test family the auto-test runs (default: `humanbound/adversarial/owasp_agentic`) |
-| `hb connect --scope ./scope.yaml` | Use a pre-made scope file as input; the backend analyses it and proposes additive intents before project creation |
+| `hb connect --scope ./scope.yaml` | Use a pre-made scope file as input; the backend analyses it and proposes additive intents before project creation. A `capabilities:` block in the file is applied to the project |
 | `hb connect --vendor <id>` | Discover and onboard a hosted-platform agent (currently `openai`); credential from env or a hidden prompt; requires login; mutually exclusive with `--endpoint` |
 | `hb projects list` | List all projects in current org |
 | `hb projects use <id>` | Set active project for subsequent commands |
@@ -48,7 +49,7 @@ The complete `hb` CLI reference, organised into eight categories: global flags, 
 | `hb projects current` | Show active project information |
 | `hb projects status` | Show project activity (running experiments, posture, monitoring) |
 | `hb projects status -w` | Watch project activity, poll every 3 minutes until idle |
-| `hb projects update` | Update project name or description |
+| `hb projects update` | Update project name, description, or capability surface (`--capabilities`) |
 | `hb projects delete <id>` | Delete project and all associated data |
 
 ## Experiments
@@ -89,8 +90,10 @@ The complete `hb` CLI reference, organised into eight categories: global flags, 
 | `hb findings retest <id>` | Retest a finding to verify a fix (--testing-level unit\|system\|acceptance, --deep, --full, --watch) |
 | `hb findings regressions <id>` | Show a finding's regression-retest history |
 | `hb assessments` | List past security assessments |
-| `hb assessments show [id]` | View assessment detail (posture trajectory, drift, coverage, duration); defaults to the latest |
-| `hb assessments terminate [id]` | Stop a running assessment (defaults to the current/latest) |
+| `hb assessments create -t <category>` | Create and run a custom assessment from your own test categories, e.g. `humanbound/adversarial/owasp_agentic` — repeat `-t`/`--test-category` or comma-separate for several (`--testing-level`/`-l`, `--wait`, `--json`, `--yes`/`-y`); with `--wait`, exits 0 on completed, 1 on failed/broken |
+| `hb assessments clone <id>` | Re-run a custom assessment with the same tests and level (`--wait`, `--json`, `--yes`/`-y`); custom assessments only |
+| `hb assessments show [id]` | View assessment detail (findings surfaced, posture trajectory, drift, coverage, duration); defaults to the latest. Custom assessments are windowless — posture and drift show `—` |
+| `hb assessments terminate [id]` | Stop a running assessment (defaults to the current/latest) (`--force` skips confirmation) |
 | `hb assessments report <id>` | Generate assessment HTML report with full test logs (-o, --no-open) |
 | `hb projects report` | Generate project HTML security report (-o, --no-open) |
 | `hb orgs report` | Generate organisation-wide HTML report (-o, --no-open) |
