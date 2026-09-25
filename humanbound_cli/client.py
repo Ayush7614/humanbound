@@ -30,7 +30,7 @@ from .config import (
     get_base_url,
     get_organisation_id,
     get_project_id,
-    write_secure_file,
+    write_secure_config_file,
 )
 from .exceptions import (
     APIError,
@@ -640,7 +640,7 @@ class HumanboundClient:
             "default_organisation_id": self._default_organisation_id,
         }
 
-        write_secure_file(TOKEN_FILE, json.dumps(credentials))
+        write_secure_config_file(TOKEN_FILE, json.dumps(credentials))
 
     # -------------------------------------------------------------------------
     # Context Management
@@ -1196,6 +1196,10 @@ class HumanboundClient:
     # Project Extensions
     # -------------------------------------------------------------------------
 
+    def get_project(self, project_id: str) -> dict:
+        """Fetch a single project by ID."""
+        return self.get(f"projects/{project_id}")
+
     def update_project(self, project_id: str, data: dict) -> dict:
         """Update a project."""
         return self.put(f"projects/{project_id}", data=data)
@@ -1289,6 +1293,22 @@ class HumanboundClient:
         return self.post(
             f"projects/{project_id}/campaign/terminate", data={"campaign_id": campaign_id}
         )
+
+    # -------------------------------------------------------------------------
+    # Assessment Methods
+    # -------------------------------------------------------------------------
+
+    def create_assessment(self, project_id: str, tests: list, level: str | None = None) -> dict:
+        """POST projects/{id}/assessments -> 202 {"assessment_id", "status": "running"}.
+        Fire-and-poll: poll get_assessment() until status in completed/failed/broken."""
+        data = {"tests": tests}
+        if level:
+            data["level"] = level
+        return self.post(f"projects/{project_id}/assessments", data=data, include_project=True)
+
+    def get_assessment(self, project_id: str, assessment_id: str) -> dict:
+        """Get a single assessment by ID."""
+        return self.get(f"projects/{project_id}/assessments/{assessment_id}")
 
     # -------------------------------------------------------------------------
     # Upload Conversations Methods
