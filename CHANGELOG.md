@@ -7,7 +7,200 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Ollama errors no longer claim the server is down when it is not.** The
+  provider showed "Is ollama running?" for any error whose text contained
+  "connection", including HTTP errors from a running server and dropped
+  connections. That hint now appears only when the connection is refused.
+  HTTP errors show their status and body, dropped connections show the
+  transport error, and timeouts say how long the provider waited. Error text
+  containing "rate" is no longer retried as a rate limit; only HTTP 429 is.
+  (#73)
+- **Parsing a bot or telemetry reply no longer swallows interrupts and
+  bugs.** When a reply was not JSON, the engine fell back to its raw text
+  using a bare `except:`, which also caught Ctrl+C, `SystemExit`, and
+  unrelated errors and passed them on as the bot's reply. Only JSON decode
+  errors fall back to text now. (#120)
+
+## [2.10.0] — 2026-09-24
+
+### Changed
+- **`hb guardrails --format yaml` writes the `humanbound-firewall` policy
+  file (`agent.yaml`)** — `scope.business`, top-level `intents`, and
+  `capabilities` — which the firewall's Tier 3 judge evaluates against.
+  Logged in, the export is saved as the platform returns it; the platform now
+  returns this layout (it used to nest the scope and intents under keys the
+  firewall does not read, so the file loaded as an empty policy). Not logged
+  in, the YAML export used to be the `rules` list; it is now built from the
+  scope the latest local test ran against, or from `--scope ./scope.json`.
+  Local `hb test` now saves that scope in the run's `meta.json`; for a run
+  from before this release, run `hb test` again or pass `--scope`. JSON
+  output and the OpenAI vendor are unchanged.
+
+### Fixed
+- **Export examples in the README and docs.** `hb guardrails -o rules.yaml`
+  wrote JSON into a `.yaml` file (`-o` names the file, not the format); the
+  examples now use `rules.json`. The README's `hb firewall train` example
+  passes the now-required `--model`.
+
+## [2.9.1] — 2026-09-24
+
+### Added
+- **Docs for `humanbound-firewall` 0.3.** The Firewall page now describes
+  the three trust classes (request, ingest, recall), `inspect()` and the
+  `Decision`, the caller-carried session, the deployment's choices, the
+  policy file's `capabilities`/`tools` block and class-tagged few-shots, with
+  the PriceWatch indirect-prompt-injection video embedded. A new
+  Defense → Frameworks → LangChain page covers the two-line adapter, every
+  attached hook, the session in the graph state, the trust-boundary
+  inventory and background judging in log mode. Every claim was checked
+  against the 0.3.0 source; the Firewall and Guardrails pages no longer say
+  the `hb guardrails` rule export configures the judge (the firewall reads
+  `agent.yaml` only), and settings the code never read are gone.
+
+### Fixed
+- **`hb firewall train` and `hb firewall show` work with `humanbound-firewall`
+  0.2 and later.** Both commands imported the package's old module name and
+  exited with an install hint even when the firewall was installed. The
+  `firewall` extra now requires `humanbound-firewall>=0.3`.
+- **`hb firewall show` reports an unreadable model file instead of a
+  traceback.** A corrupt archive, or one whose weights need pickle, is
+  refused with "Not a valid .hbfw file".
+- **`hb mcp` now reports why the MCP import failed** (#135, thanks
+  @iayanpahwa). A missing SDK and an installed-but-incompatible SDK both
+  printed "MCP dependencies not installed", sending users to re-run an install
+  that had already succeeded. The error now carries the underlying import
+  failure, so an incompatible SDK names itself.
+- **CI installs and exercises the `[mcp]` extra.** The test job installed only
+  `[dev,engine]`, so `pytest.importorskip("mcp")` skipped the entire MCP suite
+  and an unusable extra could ship green — which is how the mcp 2.x break
+  reached a release. The job now installs `[dev,engine,mcp]` and asserts the
+  extra imports before running the suite.
+- **Docs `llms.txt` no longer lists top-level pages under the previous
+  section.** Each one (e.g. Deployment, Community) now has its own heading.
+- **Docs site serves `llms-full.txt` and a `.md` copy of every page**, which
+  previously returned 404 (e.g. `/deployment.md`).
+
+### Changed
+- **`hb firewall train` requires `--model`.** The implicit default detector
+  was only found in a source checkout of the firewall; installed from PyPI it
+  always failed. Pass the path to an `AgentClassifier` script, for example
+  `--model detectors/setfit_classifier.py`.
+- **Python 3.13 and 3.14 are now tested in CI.** `requires-python` has always
+  accepted them and the classifiers already advertised 3.13, but the test
+  matrix stopped at 3.12. It now covers 3.10 through 3.14, and 3.14 is declared
+  in the classifiers to match.
+- **Discord links now point at the `#start-here` invite** (#132).
+  `README.md`, `CONTRIBUTING.md`, `pyproject.toml`, the new-issue chooser, and
+  the community and plugins docs pages used `discord.gg/WgTMpmSFtN`, which
+  opens in `#general`. They now use `discord.gg/QFTD6tr9zu`, the invite
+  www.humanbound.ai already links to. Both codes are live and both open the
+  same server, so links already in the wild keep working.
+
+## [2.9.0] — 2026-08-14
+
+### Added
+- **`hb assessments create -t <category>`** — create and run a custom
+  assessment from your own test categories, e.g.
+  `humanbound/adversarial/owasp_agentic`. Repeat `-t`/`--test-category`
+  or comma-separate to run several; flags match `hb test`
+  (`--testing-level`/`-l`, default `unit`; `--wait` to block until it
+  reaches a terminal status; `--json`, `--yes`/`-y`).
+  **`hb assessments clone <id>`** re-runs a past custom assessment with
+  the same tests and level. Two custom assessments covering different
+  domains run concurrently; a second one in the same domain is rejected,
+  as is any assessment started while a generated (ASCAM or `hb test`)
+  run is active.
+- **`hb assessments show`** now reports the findings a run surfaced.
+  Custom assessments are windowless — they never measure a posture
+  window, so posture and drift render as `—` and this line is their only
+  outcome.
+- **MCP: `hb_create_assessment` / `hb_get_assessment`** — create a custom
+  assessment and poll it to completion from an agent.
+- **`hb projects update --capabilities`** — declare an agent's
+  capability surface (`tools`, `memory`, `inter_agent`, `reasoning_model`)
+  via `key=value` pairs. Accepts `on/off`, `true/false`, `1/0`, `yes/no`,
+  with `all=on/off` shorthand for setting the full set in one step.
+- **`hb connect --repo` capability scan** — when scanning an agent
+  repository, the CLI now infers the same capability surface from
+  source-code patterns and offers to write it to the project scope.
+- **`hb connect --scope` honours a `capabilities:` block.** A scope file
+  may declare the capability surface explicitly; it is validated and
+  written to the created project. When combined with `--repo`, explicit
+  file values win over scanned ones per key.
+
+### Changed
+- **`hb test --test-category`, `--testing-level`, and `--lang` are now
+  optional with no built-in fallback.** Omit any of them and the platform
+  picks the default for that run. Specifying any flag still works exactly
+  as before. Same applies to `hb connect --level` and the equivalent
+  fields on the MCP `hb_run_test` tool.
+
+### Fixed
+- **CLI export commands write sensitive test artifacts securely.** Previously, `hb logs`, `hb guardrails`, `hb findings`, and `hb report` exported files with global read permissions. They now correctly use `0600` owner-only permissions. (Note: exporting onto a symlink now replaces the symlink, and re-exporting resets the file mode to `0600`.)
+- **`hb guardrails` now exports rules from local test results.** Local runs
+  store insights beneath `results.insights`, but the exporter only read the
+  legacy top-level key and consequently emitted an empty ruleset. The exporter
+  now reads the current schema while retaining the legacy fallback (#102).
+- **Network failures now surface as a clean `APIError` everywhere** (#68,
+  thanks @JChario for the report and the original fix). The client called
+  `requests` without wrapping transport errors, so a dropped connection or
+  timeout escaped as a raw requests exception — MCP tools returned FastMCP's
+  raw "Error executing tool …" text instead of their structured
+  `{"error": …}` envelope, and the message carried urllib3 internals. The
+  client now converts transport failures to `APIError` at the source (CLI
+  commands and all MCP tools handle it uniformly), and every MCP tool
+  additionally falls back to the structured envelope for any unexpected
+  exception.
+- **`pip install humanbound[mcp]` works again.** mcp 2.0.0 (2026-07-28)
+  removed `mcp.server.fastmcp`, so a fresh install broke `hb mcp` at import;
+  the extra now pins `mcp>=1.2.0,<2`.
+- **Agentic category-worker failures no longer report a completed scan.**
+  (#107, thanks @Ayush7614). Exceptions raised by an OWASP Agentic category
+  worker are now surfaced through the engine error callback and mark the run
+  `Failed`; local runs preserve that failure status while saving completed
+  partial results. Note for CI users: runs that previously (and wrongly)
+  exited `0` on a worker crash now exit `2`, per the documented exit-code
+  contract.
+- **`hb test` no longer claims "no results produced" when a failed run saved
+  partial results** — the exit message now points to `hb logs` instead.
+- **A crash in any local orchestrator keeps completed conversations.** The
+  local runner's generic failure path now saves partial results the same way
+  an orchestrator-reported failure does, so `owasp_single_turn` and
+  `behavioral_qa` crashes no longer discard finished work.
+- **Agentic category failures are judged after the worker pool joins, not on
+  a per-future timeout.** The pool shutdown always waited for every started
+  worker, so the old 3-hour `future.result` timeout could only misreport a
+  slow-but-successful category as failed — never actually bound the run. A
+  worker crash also no longer prints its traceback twice on stderr; the full
+  trace still reaches the error callback and DEBUG logging.
+- **Local experiment starts no longer collide within the same second.** Each
+  local run ID now includes a short UUID suffix (`exp-{timestamp}-{uuid8}`), so
+  concurrent `hb test` processes no longer overwrite each other's `_runs` slot
+  or result directory.
+- **OpenAPI extraction now resolves `$ref` parameters and request body
+  schemas.** The parser previously skipped every `$ref` parameter and only read
+  inline `properties`, so component-based specs produced incomplete parameter
+  lists on the extractor. Local JSON Pointer resolution (with cycle-safe
+  `allOf` walking and depth guards) now follows `#/components/...` and Swagger 2
+  `#/parameters/...` refs. This is groundwork for consumers of `parameters` /
+  `responses`; `hb connect` today still reads only description/method/path/
+  summary from the parse result.
+
 ### Security
+- **OAuth callback listeners are loopback-only and path-validated.** Login and
+  browser-session logout now bind only to `127.0.0.1`; login accepts an
+  authorization response only at its registered `/callback` path. Remaining
+  auth-bearing client calls that bypassed the shared wrappers also refuse
+  redirects (`persist_discovery`, token exchange, refresh, logout, and API
+  session exchange), closing the gap left after #97 — including API-key mode
+  where `x-api-key` would otherwise be forwarded across a hostname change.
+- **Local test result artifacts are written atomically at `0600`** under
+  `.humanbound/results/` directories hardened to `0700`. `logs.jsonl` retains
+  every attack prompt and the agent's raw replies (including disclosures the
+  agent wasn't supposed to make); they previously inherited the process umask
+  (commonly world-readable on first write). They now use the same secure writer
+  as `credentials.json`.
 - **Local secret files are written atomically at `0600`** (#67, thanks
   @JChario). `credentials.json`, the provider `config.yaml`, and the telemetry
   state file could briefly exist world-readable on first write (created at the
@@ -406,7 +599,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The unreachable platform branch and `humanbound_cli/connectors/microsoft.py`
   were removed; `hb connect` now exposes only agent flags. The now-unused
   `msal` dependency is dropped (#22).
-
 ## [2.0.3] — 2026-05-11
 
 ### Changed
@@ -539,9 +731,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same wheel as `humanbound_cli/`:
   ```python
   from humanbound import (
-      Bot, LocalRunner, Insight, TestingLevel,
-      EngineCallbacks, OrchestratorModule,
-      OwaspAgentic, OwaspSingleTurn, BehavioralQA,
+      Bot,
+      LocalRunner,
+      Insight,
+      TestingLevel,
+      EngineCallbacks,
+      OrchestratorModule,
+      OwaspAgentic,
+      OwaspSingleTurn,
+      BehavioralQA,
   )
   ```
   This is the stable, semver-protected contract. `humanbound_cli.*` stays as
@@ -576,7 +774,10 @@ Last release as `humanbound-cli`. See the
 [old release](https://pypi.org/project/humanbound-cli/1.1.0/) on PyPI for
 notes — that history is preserved there and is not re-documented here.
 
-[Unreleased]: https://github.com/humanbound/humanbound/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/humanbound/humanbound/compare/v2.10.0...HEAD
+[2.10.0]: https://github.com/humanbound/humanbound/releases/tag/v2.10.0
+[2.9.1]: https://github.com/humanbound/humanbound/releases/tag/v2.9.1
+[2.9.0]: https://github.com/humanbound/humanbound/releases/tag/v2.9.0
 [2.8.0]: https://github.com/humanbound/humanbound/releases/tag/v2.8.0
 [2.7.0]: https://github.com/humanbound/humanbound/releases/tag/v2.7.0
 [2.6.0]: https://github.com/humanbound/humanbound/releases/tag/v2.6.0

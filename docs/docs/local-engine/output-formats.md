@@ -13,14 +13,14 @@ keywords:
 
 # Output & Export
 
-After `hb test` finishes locally, results are written to `.humanbound/results/exp-{timestamp}/` as `meta.json` (experiment metadata + posture + insights) and `logs.jsonl` (one conversation per line). The `hb posture`, `hb logs`, and `hb report` commands read this data — viewing the posture score, filtering conversations by verdict, or producing branded HTML reports. Findings can also be exported as guardrail rules (`hb guardrails`) and used to train a Tier 2 firewall classifier.
+After `hb test` finishes locally, results are written to `.humanbound/results/exp-{timestamp}-{uuid8}/` as `meta.json` (experiment metadata + posture + insights) and `logs.jsonl` (one conversation per line). The `hb posture`, `hb logs`, and `hb report` commands read this data — viewing the posture score, filtering conversations by verdict, or producing branded HTML reports. Findings can also be exported as guardrail rules (`hb guardrails`) and used to train a Tier 2 firewall classifier.
 
 ## Results Location
 
-Results are saved to `.humanbound/results/exp-{timestamp}/` in your working directory:
+Results are saved to `.humanbound/results/exp-{timestamp}-{uuid8}/` in your working directory (the random suffix keeps concurrent runs from colliding):
 
 ```
-.humanbound/results/exp-20260419-135646/
+.humanbound/results/exp-20260419-135646-3f9c2a1b/
     meta.json       # experiment metadata + posture + insights
     logs.jsonl      # conversation logs (one per line)
 ```
@@ -82,25 +82,20 @@ The HTML report includes:
 
 ## Guardrails Export
 
-Export firewall rules from test findings:
+Export guardrail rules from test findings:
 
 ```bash
 # JSON format
 hb guardrails -o rules.json
 
-# YAML format
-hb guardrails --format yaml -o rules.yaml
+# humanbound-firewall policy file (agent.yaml), from the latest run's scope
+hb guardrails --format yaml -o agent.yaml
 
 # OpenAI moderation format
 hb guardrails --vendor openai -o openai_rules.json
 ```
 
-Use with [humanbound-firewall](https://github.com/humanbound/humanbound-firewall):
-
-```python
-from hb_firewall import Firewall
-fw = Firewall.from_config("agent.yaml", rules_path="rules.yaml")
-```
+The firewall does not read the rule lists; it enforces the scope in `agent.yaml`, which `--format yaml` writes. See [Guardrails](../defense/guardrails.md#using-with-humanbound-firewall) for what the file contains.
 
 ## Firewall Training
 
@@ -108,12 +103,14 @@ Train a Tier 2 classifier from test results:
 
 ```bash
 # From local test data
-hb firewall train
+hb firewall train --model detectors/setfit_classifier.py
 
 # From external results (vendor-agnostic)
-hb firewall train --import pyrit_results.json
-hb firewall train --import results.json:promptfoo
+hb firewall train --model detectors/setfit_classifier.py --import pyrit_results.json
+hb firewall train --model detectors/setfit_classifier.py --import results.json:promptfoo
 ```
+
+See [Firewall — Default Model: SetFit](../defense/firewall.md#default-model-setfit) for where to get the detector script.
 
 ## Log Schema
 
@@ -138,7 +135,7 @@ Each log entry contains 10 public fields:
 
 ```json
 {
-  "id": "exp-20260419-135646",
+  "id": "exp-20260419-135646-3f9c2a1b",
   "name": "cli-owasp_agentic-20260419",
   "status": "Finished",
   "test_category": "humanbound/adversarial/owasp_agentic",

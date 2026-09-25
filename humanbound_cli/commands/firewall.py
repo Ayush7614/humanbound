@@ -2,9 +2,11 @@
 # Copyright (c) 2024-2026 Humanbound
 """Firewall commands — train and manage Tier 2 classifiers for humanbound-firewall."""
 
+import logging
 import os
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import click
@@ -17,6 +19,7 @@ from ..engine.platform_runner import PlatformTestRunner
 from ..exceptions import APIError, NotAuthenticatedError
 
 console = Console()
+logger = logging.getLogger("humanbound.commands.firewall")
 
 
 @click.group("firewall")
@@ -36,9 +39,8 @@ def firewall_group():
     "--model",
     "model_path",
     type=str,
-    required=False,
-    default=None,
-    help="Path to AgentClassifier script (e.g. detectors/one_class_svm.py)",
+    required=True,
+    help="Path to AgentClassifier script (e.g. detectors/setfit_classifier.py)",
 )
 @click.option(
     "--last", "last_n", type=int, default=10, help="Last N finished experiments (default: 10)"
@@ -56,26 +58,6 @@ def firewall_group():
 )
 def train_command(model_path, last_n, from_date, until_date, min_samples, output, import_files):
     """Train Tier 2 classifiers from adversarial + QA test logs."""
-    if not model_path:
-        # Default to SetFit classifier shipped with humanbound-firewall
-        try:
-            # Try to find setfit_classifier.py relative to hb_firewall package
-            import hb_firewall
-
-            pkg_dir = Path(hb_firewall.__file__).parent.parent.parent
-            default = pkg_dir / "detectors" / "setfit_classifier.py"
-            if default.exists():
-                model_path = str(default)
-            else:
-                console.print("[red]Default SetFit classifier not found.[/red]")
-                console.print("  Provide a path to an AgentClassifier script:")
-                console.print("  hb firewall train --model detectors/setfit_classifier.py")
-                sys.exit(1)
-        except Exception:
-            console.print("[red]Provide --model flag.[/red]")
-            console.print("  hb firewall train --model detectors/setfit_classifier.py")
-            sys.exit(1)
-
     try:
         runner = get_runner()
         is_platform = isinstance(runner, PlatformTestRunner)
@@ -92,9 +74,11 @@ def train_command(model_path, last_n, from_date, until_date, min_samples, output
 
         # Load detector
         try:
-            from hb_firewall.hbfw import HBFW, load_model_class, save_hbfw
+            from humanbound_firewall.hbfw import HBFW, load_model_class, save_hbfw
         except ImportError:
-            console.print("[red]Install: pip install humanbound-firewall[/red]")
+            console.print(
+                '[red]humanbound-firewall not installed.[/red] Run: pip install "humanbound[firewall]"'
+            )
             sys.exit(1)
 
         try:
@@ -268,12 +252,18 @@ def train_command(model_path, last_n, from_date, until_date, min_samples, output
 def show_command(model_path):
     """Show model info from a trained .hbfw file."""
     try:
-        from hb_firewall.hbfw import load_hbfw
+        from humanbound_firewall.hbfw import load_hbfw
     except ImportError:
-        console.print("[red]humanbound-firewall not installed.[/red]")
+        console.print(
+            '[red]humanbound-firewall not installed.[/red] Run: pip install "humanbound[firewall]"'
+        )
         sys.exit(1)
 
-    config, _ = load_hbfw(model_path)
+    try:
+        config, _ = load_hbfw(model_path)
+    except (zipfile.BadZipFile, KeyError, ValueError, OSError) as e:
+        console.print(f"[red]Not a valid .hbfw file:[/red] {e}")
+        sys.exit(1)
     console.print(f"\n[bold]Firewall Model: {model_path}[/bold]")
     console.print(f"  Created: {config.get('created_at', '?')}")
     console.print(f"  Project: {config.get('project_id', '?')}")
@@ -358,5 +348,6 @@ def _fetch_intents(client, project_id):
         data = client.get(f"projects/{project_id}")
         intents = data.get("scope", {}).get("intents", {})
         return intents.get("permitted", []), intents.get("restricted", [])
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Failed to fetch project scope for {project_id}: {e}")
         return None, None
