@@ -403,7 +403,6 @@ class Bot(ResponseExtractor):
             # by default assume json response
             return resp.json(), time.time() - t_start, endpoint
         except (json.JSONDecodeError, ValueError):
-            # Only catch JSON parsing errors, not SystemExit/KeyboardInterrupt
             return resp.text, time.time() - t_start, endpoint
 
     # resolve the chat_completion request config - single source of truth for all
@@ -781,7 +780,6 @@ class Telemetry:
         try:
             return resp.json()
         except (json.JSONDecodeError, ValueError):
-            # Only catch JSON parsing errors, not SystemExit/KeyboardInterrupt
             return resp.text
 
     #
