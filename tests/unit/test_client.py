@@ -317,6 +317,39 @@ class TestHTTPMethods:
         assert headers["X-Custom"] == "val"
         assert headers["Authorization"] == "Bearer test-token"
 
+    @patch("humanbound_cli.client.requests.get")
+    def test_connection_error_becomes_api_error(self, mock_get, client):
+        """Transport failures surface as APIError so CLI commands and MCP
+        tools handle them through the HumanboundError hierarchy (#68)."""
+        mock_get.side_effect = requests.ConnectionError("Max retries exceeded")
+        with pytest.raises(APIError, match="Could not connect"):
+            client.get("projects")
+
+    @patch("humanbound_cli.client.requests.get")
+    def test_timeout_becomes_api_error(self, mock_get, client):
+        mock_get.side_effect = requests.Timeout()
+        with pytest.raises(APIError, match="timed out"):
+            client.get("projects")
+
+    @patch("humanbound_cli.client.requests.post")
+    def test_post_connection_error_becomes_api_error(self, mock_post, client):
+        mock_post.side_effect = requests.ConnectionError()
+        with pytest.raises(APIError, match="Could not connect"):
+            client.post("projects", data={})
+
+    @patch("humanbound_cli.client.requests.get")
+    def test_network_api_error_message_omits_exception_detail(self, mock_get, client):
+        """The APIError message names the exception class, not its body —
+        urllib3's error text (pool internals, retry state) stays out of what
+        MCP clients and CLI users see."""
+        mock_get.side_effect = requests.ConnectionError(
+            "HTTPSConnectionPool(host='x', port=443): Max retries exceeded"
+        )
+        with pytest.raises(APIError) as exc_info:
+            client.get("projects")
+        assert "Max retries" not in str(exc_info.value)
+        assert "ConnectionError" in str(exc_info.value)
+
 
 # ---------------------------------------------------------------------------
 # Credential Persistence
@@ -475,6 +508,39 @@ class TestConvenienceMethods:
         assert params["to"] == "2025-12-31"
         assert params["test_category"] == "prompt"
         assert params["last"] == 5
+
+
+class TestAssessmentMethods:
+    @patch("humanbound_cli.client.requests.post")
+    def test_create_assessment_posts_tests_and_level(self, mock_post, client):
+        mock_post.return_value = _mock_response(
+            202, {"assessment_id": "asmnt-1", "status": "running"}
+        )
+        result = client.create_assessment("proj-456", ["owasp_agentic"], level="system")
+        assert result == {"assessment_id": "asmnt-1", "status": "running"}
+        call = mock_post.call_args
+        call_url = call.args[0] if call.args else call.kwargs.get("url", "")
+        assert call_url.endswith("projects/proj-456/assessments")
+        assert call.kwargs.get("json") == {"tests": ["owasp_agentic"], "level": "system"}
+        assert call.kwargs.get("headers", {}).get("project_id") == "proj-456"
+
+    @patch("humanbound_cli.client.requests.post")
+    def test_create_assessment_omits_level_when_none(self, mock_post, client):
+        mock_post.return_value = _mock_response(
+            202, {"assessment_id": "asmnt-1", "status": "running"}
+        )
+        client.create_assessment("proj-456", ["owasp_agentic"])
+        call = mock_post.call_args
+        assert call.kwargs.get("json") == {"tests": ["owasp_agentic"]}
+
+    @patch("humanbound_cli.client.requests.get")
+    def test_get_assessment(self, mock_get, client):
+        mock_get.return_value = _mock_response(200, {"id": "asmnt-1", "status": "completed"})
+        result = client.get_assessment("proj-456", "asmnt-1")
+        assert result == {"id": "asmnt-1", "status": "completed"}
+        call = mock_get.call_args
+        call_url = call.args[0] if call.args else call.kwargs.get("url", "")
+        assert call_url.endswith("projects/proj-456/assessments/asmnt-1")
 
 
 # ---------------------------------------------------------------------------

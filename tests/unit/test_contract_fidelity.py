@@ -27,6 +27,8 @@ from pydantic import ValidationError
 
 from tests.unit._contract.schemas import (
     ApiKeyResponse,
+    AssessmentCreateResponse,
+    AssessmentDetailResponse,
     ExperimentsResponse,
     ExperimentsResponseStatus,
     FindingsResponse,
@@ -34,6 +36,7 @@ from tests.unit._contract.schemas import (
     OKMessage,
     OrganisationResponse,
     PaginationResponseApiKeys,
+    PaginationResponseAssessments,
     PaginationResponseExperiments,
     PaginationResponseLogs,
     PaginationResponseProjects,
@@ -72,16 +75,11 @@ CONTRACT_CASES = [
     (
         "GuardrailsExport humanbound",
         lambda: GuardrailsExportHumanbound(
-            project_id="proj-456",
-            source="project_scope",
-            source_id="proj-456",
-            generated_at="2026-04-21T10:00:00Z",
-            scope={
-                "overall_business_scope": "Retail banking customer support",
-                "intents": {"permitted": ["balance"], "restricted": ["approve_loan"]},
-                "more_info": "",
-            },
-        ).model_dump(),
+            name="Retail Support",
+            scope={"business": "Retail banking customer support", "more_info": ""},
+            intents={"permitted": ["balance"], "restricted": ["approve_loan"]},
+            capabilities=["tools"],
+        ).model_dump(exclude_none=True),
         GuardrailsExportHumanbound,
     ),
     (
@@ -152,6 +150,58 @@ CONTRACT_CASES = [
             has_next_page=False,
         ).model_dump(),
         PaginationResponseExperiments,
+    ),
+    (
+        "Assessment created (running)",
+        lambda: AssessmentCreateResponse(assessment_id="asmnt-1", status="running").model_dump(),
+        AssessmentCreateResponse,
+    ),
+    (
+        "Assessment detail",
+        lambda: AssessmentDetailResponse(
+            id="asmnt-001",
+            domain=["security"],
+            status="completed",
+            activity="custom",
+            test_count=50,
+            posture_before=None,
+            posture_after=None,
+            drift_score=None,
+            started_at=1781845200,
+            completed_at=1781846717,
+            discovery_plan={"entries": [{"orchestrator": "owasp_agentic", "level": "unit"}]},
+            trigger_source="manual",
+            owner_id="user-123",
+        ).model_dump(),
+        AssessmentDetailResponse,
+    ),
+    (
+        "Assessments page",
+        lambda: PaginationResponseAssessments(
+            data=[
+                {
+                    "id": "asmnt-001",
+                    "domain": ["security"],
+                    "status": "completed",
+                    "activity": "custom",
+                    "test_count": 50,
+                    "posture_before": {"posture": 60.0, "grade": "C"},
+                    "posture_after": {"posture": 72.5, "grade": "B"},
+                    "drift_score": -0.08,
+                    "started_at": 1781845200,
+                    "completed_at": 1781846717,
+                    "findings_discovered": 3,
+                    "discovery_plan": {"entries": []},
+                    "trigger_source": "manual",
+                    "owner_id": "user-123",
+                }
+            ],
+            total=1,
+            page=1,
+            size=50,
+            has_next_page=False,
+        ).model_dump(),
+        PaginationResponseAssessments,
     ),
     (
         "Projects page",
